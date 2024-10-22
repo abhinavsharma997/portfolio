@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Abhinav Sharma's Space Portfolio</title>
+    <style>
+        /* Import Inter font as a placeholder for SF Pro */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+
+        /* Global styles */
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: linear-gradient(180deg, #0A0A0A 0%, #1A1A1A 100%);
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Navigation Instructions */
+        #info {
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            text-align: center;
+            color: #888; /* Subtle gray color */
+            z-index: 1;
+            transition: opacity 1s ease;
+        }
+
+        /* Hide info when moving */
+        #info.hidden {
+            opacity: 0;
+        }
+
+        #info p {
+            margin: 0;
+            padding: 0;
+            font-size: 12px; /* Smaller font size */
+            font-weight: 400;
+        }
+
+        /* Logo Styles */
+        #logo {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 43px;
+            height: 29px;
+            z-index: 2;
+            overflow: hidden;
+        }
+        #logo img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            object-position: center;
+            filter: brightness(0) invert(1);
+        }
+
+        /* Name and Tagline */
+        #name-tagline {
+            position: absolute;
+            top: 50%;
+            width: 100%;
+            transform: translateY(-50%);
+            text-align: center;
+            color: #FFFFFF;
+            z-index: 1;
+            transition: all 1s ease; /* For smooth transition */
+        }
+        #name-tagline.hidden {
+            top: calc(100% - 60px);
+            transform: translateY(-100%);
+            color: #888;
+            font-size: 14px;
+        }
+        #name-tagline h1 {
+            margin: 0;
+            font-size: 36px;
+            font-weight: 700;
+        }
+        #name-tagline p {
+            margin: 10px 0 0 0;
+            font-size: 18px;
+            font-weight: 400;
+        }
+    </style>
+</head>
+<body>
+    <!-- AS Logo -->
+    <div id="logo">
+        <img src="logo.png" alt="AS Logo">
+    </div>
+
+    <!-- Name and Tagline -->
+    <div id="name-tagline">
+        <h1>hi, I'm abhinav sharma.</h1>
+        <p>I aim to design meaningful experiences, solving one problem at a time.</p>
+    </div>
+
+    <!-- Navigation Instructions -->
+    <div id="info">
+        <p>Use Arrow Keys or W/A/S/D to navigate the spaceship</p>
+    </div>
+
+    <!-- Include Three.js -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.130.1/build/three.min.js"></script>
+
+    <script>
+        // Initialize variables
+        let scene, camera, renderer;
+        let spaceship, projectPoints = [], labels = [];
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let speed = 0.2;
+        let stars, warpStars;
+        let minZ, maxZ;
+        let collisionCooldown = false;
+        let warpSpeed = false;
+        let warpProgress = 0;
+        let targetURL = '';
+        let warpPhase = 0; // 0: initial, 1: pause and feedback, 2: moving towards wormhole, 3: warp speed
+        let warpTargetPosition;
+        let socialLinks = [];
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2();
+        let hasMoved = false; // To track if the spaceship has started moving
+        let initialSpaceshipPosition = new THREE.Vector3(0, -5, 100); // Increased Z position
+        let targetSpaceshipPosition = new THREE.Vector3(0, 0, 100);
+        let spaceshipMovingUp = false;
+
+        init();
+        animate();
+
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+
+            // Set up camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000);
+            camera.position.z = 5;
+            camera.position.y = 2;
+
+            // Set up renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Create spaceship model using primitives
+            spaceship = createSpaceship();
+            // Start spaceship below the normal position
+            spaceship.position.copy(initialSpaceshipPosition);
+            scene.add(spaceship);
+
+            // Create project points (wormholes)
+            const projectPositions = [
+                { x: -5, y: 0, z: 60, name: 'Maestro Insights Platform', color: 0xf0f0f0, url: 'https://www.abhinavsharma.space/moon' },
+                { x: 5, y: 0, z: 20, name: 'Tourio', color: 0x0000ff, url: 'https://www.abhinavsharma.space/tourio' },
+                // Add more project positions as needed
+            ];
+
+            projectPositions.forEach((pos, index) => {
+                const wormhole = createWormhole(pos.color);
+                wormhole.position.set(pos.x, pos.y, pos.z);
+                wormhole.userData = { name: pos.name, url: pos.url };
+                // Tilt the wormhole
+                wormhole.rotation.x = THREE.MathUtils.degToRad(15 * (index % 2 === 0 ? 1 : -1)); // Alternate tilt
+                scene.add(wormhole);
+                projectPoints.push(wormhole);
+
+                // Create text label using canvas texture
+                const label = createTextLabel(pos.name);
+                label.position.set(pos.x, pos.y + 3, pos.z);
+                scene.add(label);
+                labels.push(label);
+            });
+
+            // Define movement bounds
+            minZ = projectPositions[projectPositions.length - 1].z - 20; // 20 units beyond the last wormhole
+            maxZ = spaceship.position.z; // Starting position
+
+            // Create starry background
+            createStarfield();
+
+            // Add social links
+            createSocialLink('https://github.com/abhinav', 'github-icon.png', new THREE.Vector3(10, 0, -20));
+            // Add more social links as needed
+
+            // Event listeners for window resize and key presses
+            window.addEventListener('resize', onWindowResize, false);
+            window.addEventListener('keydown', onKeyDown, false);
+            window.addEventListener('keyup', onKeyUp, false);
+            window.addEventListener('blur', onWindowBlur, false);
+            window.addEventListener('focus', onWindowFocus, false);
+
+            // Add event listener for mouse clicks
+            renderer.domElement.addEventListener('click', onDocumentMouseDown, false);
+        }
+
+        function createTextLabel(text) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 512;
+            canvas.height = 256;
+            context.font = 'Bold 40px Inter'; // Replace 'Inter' with 'SF Pro' if available
+            context.fillStyle = 'white';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(text, canvas.width / 2, canvas.height / 2);
+
+            const texture = new THREE.CanvasTexture(canvas);
+
+            const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(material);
+            sprite.scale.set(10, 5, 1); // Adjust the size as needed
+
+            return sprite;
+        }
+
+        function createSpaceship() {
+            const spaceshipGroup = new THREE.Group();
+
+            // Body
+            const bodyGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1.5, 32);
+            const bodyMaterial = new THREE.MeshBasicMaterial({ color: 0xaaaaaa });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            spaceshipGroup.add(body);
+
+            // Nose
+            const noseGeometry = new THREE.ConeGeometry(0.2, 0.5, 32);
+            const noseMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const nose = new THREE.Mesh(noseGeometry, noseMaterial);
+            nose.position.y = 1;
+            spaceshipGroup.add(nose);
+
+            // Wings
+            const wingGeometry = new THREE.BoxGeometry(0.05, 0.4, 1.5);
+            const wingMaterial = new THREE.MeshBasicMaterial({ color: 0x444444 });
+            const leftWing = new THREE.Mesh(wingGeometry, wingMaterial);
+            leftWing.position.set(-0.3, 0, 0);
+            leftWing.rotation.z = Math.PI / 4;
+            spaceshipGroup.add(leftWing);
+
+            const rightWing = leftWing.clone();
+            rightWing.position.x = 0.3;
+            rightWing.rotation.z = -Math.PI / 4;
+            spaceshipGroup.add(rightWing);
+
+            // Engine
+            const engineGeometry = new THREE.CylinderGeometry(0.15, 0.15, 0.5, 32);
+            const engineMaterial = new THREE.MeshBasicMaterial({ color: 0x333333 });
+            const engine = new THREE.Mesh(engineGeometry, engineMaterial);
+            engine.position.y = -1;
+            spaceshipGroup.add(engine);
+
+            // Windows
+            const windowGeometry = new THREE.CircleGeometry(0.1, 32);
+            const windowMaterial = new THREE.MeshBasicMaterial({ color: 0x00aaff });
+            const window = new THREE.Mesh(windowGeometry, windowMaterial);
+            window.position.set(0, 0.5, 0.21);
+            spaceshipGroup.add(window);
+
+            // Adjust orientation
+            spaceshipGroup.rotation.x = Math.PI / 2;
+
+            return spaceshipGroup;
+        }
+
+        function createStarfield() {
+            // Create stars
+            const starGeometry = new THREE.BufferGeometry();
+            const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5 });
+
+            const starVertices = [];
+            for (let i = 0; i < 10000; i++) {
+                const x = THREE.MathUtils.randFloatSpread(2000);
+                const y = THREE.MathUtils.randFloatSpread(2000);
+                const z = THREE.MathUtils.randFloatSpread(2000);
+                starVertices.push(x, y, z);
+            }
+
+            starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+
+            stars = new THREE.Points(starGeometry, starMaterial);
+            scene.add(stars);
+
+            // Create warp stars for warp-speed effect
+            createWarpStars();
+        }
+
+        function createWarpStars() {
+            const warpStarGeometry = new THREE.BufferGeometry();
+            const warpStarMaterial = new THREE.PointsMaterial({ size: 1, transparent: true, vertexColors: true });
+
+            const warpStarVertices = [];
+            const warpStarSpeeds = [];
+            const warpStarColors = [];
+            const numWarpStars = 2000;
+
+            for (let i = 0; i < numWarpStars; i++) {
+                const x = THREE.MathUtils.randFloatSpread(200);
+                const y = THREE.MathUtils.randFloatSpread(200);
+                const z = THREE.MathUtils.randFloat(-1000, -50);
+                warpStarVertices.push(x, y, z);
+
+                // Assign random speeds for stars to create streaking effect
+                warpStarSpeeds.push(THREE.MathUtils.randFloat(50, 100));
+
+                // Randomize colors to off-white shades
+                const colorVariance = THREE.MathUtils.randFloat(0.8, 1.0);
+                const starColor = new THREE.Color(colorVariance, colorVariance, colorVariance * 0.9); // Slightly yellowish
+                warpStarColors.push(starColor.r, starColor.g, starColor.b);
+            }
+
+            warpStarGeometry.setAttribute('position', new THREE.Float32BufferAttribute(warpStarVertices, 3));
+            warpStarGeometry.setAttribute('speed', new THREE.Float32BufferAttribute(warpStarSpeeds, 1));
+            warpStarGeometry.setAttribute('color', new THREE.Float32BufferAttribute(warpStarColors, 3));
+
+            warpStars = new THREE.Points(warpStarGeometry, warpStarMaterial);
+            warpStars.visible = false; // Hide until warp effect
+            scene.add(warpStars);
+        }
+
+        function createWormhole(colorHex) {
+            const group = new THREE.Group();
+
+            // Create spiral particles for wormhole
+            const particleGeometry = new THREE.BufferGeometry();
+            const particleCount = 1000;
+            const positions = [];
+            const colors = [];
+            const color = new THREE.Color(colorHex);
+
+            for (let i = 0; i < particleCount; i++) {
+                const angle = i * 0.1;
+                const radius = 2.5 * (i / particleCount);
+                const x = radius * Math.cos(angle);
+                const y = radius * Math.sin(angle);
+                const z = 0;
+                positions.push(x, y, z);
+
+                colors.push(color.r, color.g, color.b);
+            }
+
+            particleGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            particleGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+            const particleMaterial = new THREE.PointsMaterial({
+                size: 0.1,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.7
+            });
+
+            const particles = new THREE.Points(particleGeometry, particleMaterial);
+            group.add(particles);
+
+            return group;
+        }
+
+        function createSocialLink(url, iconPath, position) {
+            const textureLoader = new THREE.TextureLoader();
+            const texture = textureLoader.load(iconPath);
+            const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(material);
+            sprite.scale.set(3, 3, 1);
+            sprite.position.copy(position);
+            sprite.userData = { url };
+
+            socialLinks.push(sprite);
+
+            scene.add(sprite);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onKeyDown(event) {
+            if (warpSpeed) return; // Prevent movement during warp
+
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW':
+                    moveForward = true;
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    moveBackward = true;
+                    break;
+                case 'ArrowLeft':
+                case 'KeyA':
+                    moveLeft = true;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    moveRight = true;
+                    break;
+            }
+
+            // When movement starts, animate the spaceship moving up and hide the name and tagline
+            if (!hasMoved) {
+                hasMoved = true;
+                spaceshipMovingUp = true;
+
+                const nameTagline = document.getElementById('name-tagline');
+                nameTagline.classList.add('hidden');
+
+                const info = document.getElementById('info');
+                info.classList.add('hidden');
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW':
+                    moveForward = false;
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    moveBackward = false;
+                    break;
+                case 'ArrowLeft':
+                case 'KeyA':
+                    moveLeft = false;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    moveRight = false;
+                    break;
+            }
+        }
+
+        function onWindowBlur() {
+            // Reset movement flags when window loses focus
+            moveForward = false;
+            moveBackward = false;
+            moveLeft = false;
+            moveRight = false;
+        }
+
+        function onWindowFocus() {
+            // Ensure movement flags are reset when window gains focus
+            moveForward = false;
+            moveBackward = false;
+            moveLeft = false;
+            moveRight = false;
+        }
+
+        function onDocumentMouseDown(event) {
+            event.preventDefault();
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            const intersects = raycaster.intersectObjects(socialLinks);
+
+            if (intersects.length > 0) {
+                const url = intersects[0].object.userData.url;
+                window.open(url, '_blank');
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (warpSpeed) {
+                // Warp-speed animation
+                warpAnimation();
+            } else {
+                // Animate spaceship moving up to target position
+                if (spaceshipMovingUp) {
+                    spaceship.position.y += 0.1; // Adjust speed as needed
+                    if (spaceship.position.y >= targetSpaceshipPosition.y) {
+                        spaceship.position.y = targetSpaceshipPosition.y;
+                        spaceshipMovingUp = false;
+                    }
+                }
+
+                // Spaceship movement
+                const direction = new THREE.Vector3();
+                if (moveForward) direction.z -= 1;
+                if (moveBackward) direction.z += 1;
+                if (moveLeft) direction.x -= 1;
+                if (moveRight) direction.x += 1;
+
+                direction.normalize();
+                spaceship.position.addScaledVector(direction, speed);
+
+                // Limit spaceship movement
+                spaceship.position.z = THREE.MathUtils.clamp(spaceship.position.z, minZ, maxZ);
+
+                // Update camera to follow spaceship position closely
+                const cameraOffset = new THREE.Vector3(0, 2, 5);
+                camera.position.copy(spaceship.position).add(cameraOffset);
+                camera.lookAt(spaceship.position);
+
+                // Rotate wormholes
+                projectPoints.forEach(point => {
+                    point.children[0].rotation.z += 0.05;
+
+                    // Check for collisions with the spaceship
+                    if (!collisionCooldown && spaceship.position.distanceTo(point.position) < 1.5) {
+                        redirectToProject(point.userData.url, point.position.clone());
+                        collisionCooldown = true;
+                        setTimeout(() => {
+                            collisionCooldown = false;
+                        }, 1000); // 1 second cooldown
+                    }
+                });
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function warpAnimation() {
+            // [Warp-speed animation code remains the same]
+            if (warpPhase === 0) {
+                // Phase 0: Initial pause and feedback
+                warpProgress += 0.02;
+
+                // Hide labels
+                labels.forEach(label => label.visible = false);
+
+                // Provide visual feedback on the wormhole
+                projectPoints.forEach(point => {
+                    // Pulsate the wormhole's opacity
+                    const particles = point.children[0];
+                    const material = particles.material;
+                    material.opacity = 0.7 + 0.3 * Math.sin(Date.now() * 0.01);
+                    material.size = 0.1 + 0.05 * Math.sin(Date.now() * 0.01);
+                    particles.rotation.z += 0.05; // Add rotation for effect
+                });
+
+                if (warpProgress >= 1) {
+                    warpPhase = 1;
+                    warpProgress = 0;
+                }
+            } else if (warpPhase === 1) {
+                // Phase 1: Move spaceship towards wormhole
+                warpProgress += 0.02;
+                spaceship.position.lerp(warpTargetPosition, warpProgress);
+
+                // Update camera position
+                const cameraOffset = new THREE.Vector3(0, 2, 5);
+                camera.position.copy(spaceship.position).add(cameraOffset);
+                camera.lookAt(spaceship.position);
+
+                // Stop wormhole rotation
+                projectPoints.forEach(point => {
+                    point.children[0].rotation.z += 0;
+                });
+
+                if (warpProgress >= 1) {
+                    warpPhase = 2;
+                    warpProgress = 0;
+                }
+            } else if (warpPhase === 2) {
+                // Phase 2: Pass through wormhole
+                warpProgress += 0.02;
+
+                // Fade out wormhole
+                projectPoints.forEach(point => {
+                    const material = point.children[0].material;
+                    material.opacity = THREE.MathUtils.lerp(0.7, 0, warpProgress);
+                });
+
+                if (warpProgress >= 1) {
+                    warpPhase = 3;
+                    warpProgress = 0;
+
+                    // Hide wormhole
+                    projectPoints.forEach(point => {
+                        scene.remove(point);
+                    });
+                }
+            } else if (warpPhase === 3) {
+                // Phase 3: Warp-speed animation
+                warpProgress += 0.02;
+
+                // Show warp stars
+                if (!warpStars.visible) {
+                    warpStars.visible = true;
+                    stars.visible = false; // Hide regular stars
+                }
+
+                // Animate warp stars
+                const positions = warpStars.geometry.attributes.position.array;
+                const speeds = warpStars.geometry.attributes.speed.array;
+                for (let i = 0; i < positions.length; i += 3) {
+                    positions[i + 2] += speeds[i / 3] * 0.1;
+                    if (positions[i + 2] > 50) {
+                        positions[i + 2] = THREE.MathUtils.randFloat(-1000, -50);
+                    }
+                }
+                warpStars.geometry.attributes.position.needsUpdate = true;
+
+                // Fade in warp stars
+                warpStars.material.opacity = THREE.MathUtils.lerp(0, 1, warpProgress);
+
+                // Camera zoom in effect
+                camera.fov = THREE.MathUtils.lerp(75, 90, warpProgress);
+                camera.updateProjectionMatrix();
+
+                if (warpProgress >= 1) {
+                    // Redirect after warp-speed animation
+                    window.location.href = targetURL;
+                }
+            }
+        }
+
+        function redirectToProject(url, wormholePosition) {
+            // Start warp-speed animation
+            warpSpeed = true;
+            warpProgress = 0;
+            warpPhase = 0;
+            targetURL = url;
+
+            // Disable movement
+            moveForward = false;
+            moveBackward = false;
+            moveLeft = false;
+            moveRight = false;
+
+            // Set target position to wormhole position
+            warpTargetPosition = new THREE.Vector3(wormholePosition.x, spaceship.position.y, wormholePosition.z);
+        }
+
+    </script>
+</body>
+</html>
